@@ -17,6 +17,7 @@ app.use('/api/destinations', require('./routes/destinations'));
 app.use('/api/student', require('./routes/students'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/statistics', require('./routes/statistics'));
+app.use('/api/public', require('./routes/public'));
 
 // Health check
 app.get('/', (req, res) => {
