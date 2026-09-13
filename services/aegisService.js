@@ -1,6 +1,6 @@
 const sendToAegis = async (rawAlert) => {
   try {
-    const response = await fetch(process.env.https://your-aegis-url.com/api/webhook, {
+    const response = await fetch(process.env.https://aegis-1-15r0.onrender.com/api/webhook/alert, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
