@@ -1,10 +1,10 @@
 const sendToAegis = async (rawAlert) => {
   try {
-    const response = await fetch(process.env.https://aegis-1-15r0.onrender.com/api/webhook/alert, {
+    const response = await fetch(process.env.AEGIS_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": process.env.aegis_Pbl1BBmiRo4MLublkWqTSnQ6JFAazJbFNtRPBHYnf7Q,
+        "X-API-Key": process.env.AEGIS_API_KEY,
       },
       body: JSON.stringify({
         raw_alert: rawAlert,
