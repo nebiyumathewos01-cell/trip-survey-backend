@@ -1,23 +1,43 @@
 const express = require('express');
-const router  = express.Router();
+const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Student = require('../models/Student');
+const { sendToAegis } = require('../../service/aegisService');
 
 const MAX_CHANGES = 3; // 1 initial vote + 2 changes
 
 /* ─── Validation rules ─────────────────────────────────────────────────── */
 const voteRules = [
-  body('name').trim().notEmpty().withMessage('Full name is required'),
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Full name is required'),
+
   body('studentId')
-    .trim().notEmpty().withMessage('Student ID is required')
+    .trim()
+    .notEmpty()
+    .withMessage('Student ID is required')
     .matches(/^[Ww][Cc][Uu]\d+$/)
-    .withMessage('Student ID must be WCU followed by numbers (e.g. WCU170167)'),
-  body('section').isIn(['A', 'B']).withMessage('Section must be A or B'),
-  body('destination').trim().notEmpty().withMessage('Destination is required'),
-  body('reason').trim().notEmpty().withMessage('Reason is required'),
+    .withMessage(
+      'Student ID must be WCU followed by numbers (e.g. WCU170167)'
+    ),
+
+  body('section')
+    .isIn(['A', 'B'])
+    .withMessage('Section must be A or B'),
+
+  body('destination')
+    .trim()
+    .notEmpty()
+    .withMessage('Destination is required'),
+
+  body('reason')
+    .trim()
+    .notEmpty()
+    .withMessage('Reason is required'),
 ];
 
-/* ─── GET /api/student/:studentId  — check vote status ─────────────────── */
+/* ─── GET /api/student/:studentId — check vote status ─────────────────── */
 router.get('/:studentId', async (req, res) => {
   try {
     const student = await Student.findOne({
@@ -31,34 +51,45 @@ router.get('/:studentId', async (req, res) => {
     const changesLeft = MAX_CHANGES - student.changeCount;
 
     res.json({
-      exists:      true,
+      exists: true,
       destination: student.destination,
       changeCount: student.changeCount,
       changesLeft,
-      locked:      student.changeCount >= MAX_CHANGES,
+      locked: student.changeCount >= MAX_CHANGES,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-/* ─── POST /api/student  — submit or update vote ───────────────────────── */
+/* ─── POST /api/student — submit or update vote ───────────────────────── */
 router.post('/', voteRules, async (req, res) => {
   // Validate inputs
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
   }
 
   const {
-    name, studentId, section, destination,
-    customDestination, customReason, reason,
+    name,
+    studentId,
+    section,
+    destination,
+    customDestination,
+    customReason,
+    reason,
   } = req.body;
 
   const upperID = studentId.toUpperCase();
 
   try {
-    const existing = await Student.findOne({ studentId: upperID });
+    const existing = await Student.findOne({
+      studentId: upperID,
+    });
 
     /* ── New vote ── */
     if (!existing) {
@@ -68,54 +99,92 @@ router.post('/', voteRules, async (req, res) => {
         section,
         destination,
         customDestination: customDestination || '',
-        customReason:      customReason      || '',
+        customReason: customReason || '',
         reason,
         changeCount: 0,
       });
+
+      // Send new vote to Aegis
+      await sendToAegis(`
+Student Trip Survey Alert
+
+Action: New vote submitted
+Name: ${name}
+Student ID: ${upperID}
+Section: ${section}
+Destination: ${destination}
+Custom Destination: ${customDestination || 'None'}
+Reason: ${reason}
+Custom Reason: ${customReason || 'None'}
+`);
+
       return res.status(201).json({
-        success:     true,
-        isUpdate:    false,
-        changesLeft: MAX_CHANGES - 1, // they still have 2 changes
-        message:     'Your vote has been submitted successfully!',
-        data:        student,
+        success: true,
+        isUpdate: false,
+        changesLeft: MAX_CHANGES - 1,
+        message: 'Your vote has been submitted successfully!',
+        data: student,
       });
     }
 
     /* ── Locked — no changes left ── */
     if (existing.changeCount >= MAX_CHANGES) {
       return res.status(403).json({
-        success:  false,
-        locked:   true,
-        message:  'Your vote is up — you have used all your changes.',
+        success: false,
+        locked: true,
+        message:
+          'Your vote is up — you have used all your changes.',
       });
     }
 
     /* ── Update vote ── */
-    existing.name              = name;
-    existing.section           = section;
-    existing.destination       = destination;
+    existing.name = name;
+    existing.section = section;
+    existing.destination = destination;
     existing.customDestination = customDestination || '';
-    existing.customReason      = customReason      || '';
-    existing.reason            = reason;
-    existing.changeCount       += 1;
+    existing.customReason = customReason || '';
+    existing.reason = reason;
+    existing.changeCount += 1;
 
     await existing.save();
+
+    // Send updated vote to Aegis
+    await sendToAegis(`
+Student Trip Survey Alert
+
+Action: Vote updated
+Name: ${name}
+Student ID: ${upperID}
+Section: ${section}
+Destination: ${destination}
+Custom Destination: ${customDestination || 'None'}
+Reason: ${reason}
+Custom Reason: ${customReason || 'None'}
+Change Count: ${existing.changeCount}
+`);
 
     const changesLeft = MAX_CHANGES - existing.changeCount;
 
     return res.json({
-      success:     true,
-      isUpdate:    true,
+      success: true,
+      isUpdate: true,
       changesLeft,
-      locked:      changesLeft === 0,
-      message:     changesLeft === 0
-        ? 'Vote updated. This was your final change — your vote is now locked.'
-        : `Vote updated successfully. You have ${changesLeft} change${changesLeft === 1 ? '' : 's'} left.`,
+      locked: changesLeft === 0,
+      message:
+        changesLeft === 0
+          ? 'Vote updated. This was your final change — your vote is now locked.'
+          : `Vote updated successfully. You have ${changesLeft} change${
+              changesLeft === 1 ? '' : 's'
+            } left.`,
       data: existing,
     });
-
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Student vote error:', err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 });
 
