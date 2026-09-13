@@ -1,0 +1,24 @@
+const sendToAegis = async (alert) => { 
+  try { 
+    const response = await fetch(process.env.https://aegis-1-15r0.onrender.com/api/webhook/alert, { 
+      method: "POST", 
+      headers: { 
+        "Content-Type": "application/json", 
+        "x-api-key": process.env.aegis_Pbl1BBmiRo4MLublkWqTSnQ6JFAazJbFNtRPBHYnf7Q, 
+      }, 
+      body: JSON.stringify(alert), 
+    }); 
+ 
+    const result = await response.text(); 
+ 
+    console.log("Aegis status:", response.status); 
+    console.log("Aegis response:", result); 
+ 
+    return response.ok; 
+  } catch (error) { 
+    console.error("https://aegis-1-15r0.onrender.com/api/webhook/alert", error); 
+    return false; 
+  } 
+}; 
+ 
+module.exports = { sendToAegis };
